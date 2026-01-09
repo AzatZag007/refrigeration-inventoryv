@@ -5,7 +5,9 @@ import {
   View,
   TouchableOpacity,
   Alert,
-  ScrollView
+  ScrollView,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -13,43 +15,44 @@ export default function ProfileScreen() {
   const { user, logout } = useAuth();
 
   const handleLogout = () => {
-    Alert.alert(
-      'Выход',
-      'Вы уверены, что хотите выйти?',
-      [
-        {
-          text: 'Отмена',
-          style: 'cancel',
+    Alert.alert('Выход', 'Вы уверены, что хотите выйти?', [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Выйти',
+        style: 'destructive',
+        onPress: () => {
+          logout();
+          console.log('🚪 Пользователь вышел из системы');
         },
-        {
-          text: 'Выйти',
-          style: 'destructive',
-          onPress: () => {
-            logout();
-            console.log('🚪 Пользователь вышел из системы');
-          },
-        },
-      ]
-    );
+      },
+    ]);
   };
 
+  // ✅ высота статус-бара на Android
+  const androidStatusBar = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
+
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* ✅ запрет рисования "под" статус-баром */}
+      <StatusBar barStyle="light-content" translucent={false} backgroundColor="#007AFF" />
+
+      <View style={[styles.header, { paddingTop: 24 + androidStatusBar }]}>
         <Text style={styles.title}>👤 Профиль</Text>
         <Text style={styles.subtitle}>Информация о вашем аккаунте</Text>
       </View>
 
       <View style={styles.profileCard}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {user?.username?.charAt(0).toUpperCase() || 'U'}
-          </Text>
+          <Text style={styles.avatarText}>{user?.username?.charAt(0).toUpperCase() || 'U'}</Text>
         </View>
-        
+
         <Text style={styles.username}>{user?.username}</Text>
         <Text style={styles.email}>{user?.email}</Text>
-        
+
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>
             {user?.role === 'admin' && '👑 Администратор'}
@@ -58,19 +61,17 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
-        {user?.full_name && (
-          <Text style={styles.fullName}>{user.full_name}</Text>
-        )}
+        {user?.full_name ? <Text style={styles.fullName}>{user.full_name}</Text> : null}
       </View>
 
       <View style={styles.infoSection}>
         <Text style={styles.sectionTitle}>Информация об аккаунте</Text>
-        
+
         <View style={styles.infoItem}>
           <Text style={styles.infoLabel}>ID пользователя:</Text>
           <Text style={styles.infoValue}>{user?.id}</Text>
         </View>
-        
+
         <View style={styles.infoItem}>
           <Text style={styles.infoLabel}>Роль:</Text>
           <Text style={styles.infoValue}>
@@ -79,22 +80,19 @@ export default function ProfileScreen() {
             {user?.role === 'viewer' && 'Наблюдатель'}
           </Text>
         </View>
-        
+
         <View style={styles.infoItem}>
           <Text style={styles.infoLabel}>Имя пользователя:</Text>
           <Text style={styles.infoValue}>{user?.username}</Text>
         </View>
-        
-        <View style={styles.infoItem}>
+
+        <View style={[styles.infoItem, styles.infoItemLast]}>
           <Text style={styles.infoLabel}>Email:</Text>
           <Text style={styles.infoValue}>{user?.email}</Text>
         </View>
       </View>
 
-      <TouchableOpacity 
-        style={styles.logoutButton}
-        onPress={handleLogout}
-      >
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutButtonText}>🚪 Выйти из системы</Text>
       </TouchableOpacity>
 
@@ -110,26 +108,34 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  contentContainer: {
+    paddingBottom: 140, // чтобы низ не прятался под tabBar
+  },
+
   header: {
     backgroundColor: '#007AFF',
-    padding: 25,
-    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
     alignItems: 'center',
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: 'bold',
     color: 'white',
-    marginBottom: 5,
+    marginBottom: 6,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center',
   },
+
   profileCard: {
     backgroundColor: 'white',
-    margin: 20,
-    padding: 25,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 22,
     borderRadius: 15,
     alignItems: 'center',
     shadowColor: '#000',
@@ -139,34 +145,36 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 78,
+    height: 78,
+    borderRadius: 39,
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 14,
   },
   avatarText: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: 'bold',
     color: 'white',
   },
   username: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 5,
+    marginBottom: 4,
+    textAlign: 'center',
   },
   email: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#666',
-    marginBottom: 15,
+    marginBottom: 14,
+    textAlign: 'center',
   },
   roleBadge: {
     backgroundColor: '#e3f2fd',
-    paddingHorizontal: 15,
-    paddingVertical: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: 20,
     marginBottom: 10,
   },
@@ -174,16 +182,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#007AFF',
+    textAlign: 'center',
   },
   fullName: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#555',
     fontStyle: 'italic',
+    textAlign: 'center',
   },
+
   infoSection: {
     backgroundColor: 'white',
-    margin: 20,
-    padding: 20,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 18,
     borderRadius: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -195,7 +207,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 15,
+    marginBottom: 12,
+    textAlign: 'center',
   },
   infoItem: {
     flexDirection: 'row',
@@ -204,6 +217,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+  },
+  infoItemLast: {
+    borderBottomWidth: 0,
   },
   infoLabel: {
     fontSize: 14,
@@ -217,26 +233,30 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
   },
+
   logoutButton: {
     backgroundColor: '#dc3545',
-    margin: 20,
-    padding: 15,
-    borderRadius: 10,
+    marginHorizontal: 16,
+    marginTop: 16,
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center',
     shadowColor: '#dc3545',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 5,
     elevation: 3,
   },
   logoutButtonText: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
+
   version: {
     alignItems: 'center',
-    padding: 20,
+    paddingTop: 16,
   },
   versionText: {
     fontSize: 12,

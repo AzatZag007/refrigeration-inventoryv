@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
@@ -32,7 +34,10 @@ export default function EquipmentListScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const { user, token } = useAuth();
-  const navigation = useNavigation<any>(); // ✅ фикс TS "never" [web:221]
+  const navigation = useNavigation<any>();
+
+  // ✅ отступ, чтобы UI не залезал под системный статус-бар на Android (edge-to-edge)
+  const topInset = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 
   const handleExportPDF = async () => {
     if (!equipment || equipment.length === 0) {
@@ -123,43 +128,39 @@ export default function EquipmentListScreen() {
       return;
     }
 
-    Alert.alert(
-      'Удаление оборудования',
-      `Вы уверены, что хотите удалить "${item.model_name || 'оборудование'}"?`,
-      [
-        { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Удалить',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await fetch(
-                `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.EQUIPMENT}/${item.id}`,
-                {
-                  method: 'DELETE',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                  },
-                }
-              );
-
-              if (response.ok) {
-                Alert.alert('Успех', 'Оборудование удалено');
-                loadEquipment();
-              } else {
-                const errorText = await response.text();
-                console.error('❌ Ошибка удаления:', response.status, errorText);
-                Alert.alert('Ошибка', `HTTP ${response.status}: ${errorText}`);
+    Alert.alert('Удаление оборудования', `Вы уверены, что хотите удалить "${item.model_name || 'оборудование'}"?`, [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Удалить',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const response = await fetch(
+              `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.EQUIPMENT}/${item.id}`,
+              {
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                },
               }
-            } catch (error) {
-              console.error('❌ Сеть:', error);
-              Alert.alert('Сеть', 'Не удалось удалить');
+            );
+
+            if (response.ok) {
+              Alert.alert('Успех', 'Оборудование удалено');
+              loadEquipment();
+            } else {
+              const errorText = await response.text();
+              console.error('❌ Ошибка удаления:', response.status, errorText);
+              Alert.alert('Ошибка', `HTTP ${response.status}: ${errorText}`);
             }
-          },
+          } catch (error) {
+            console.error('❌ Сеть:', error);
+            Alert.alert('Сеть', 'Не удалось удалить');
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleEquipmentLongPress = (item: Equipment) => {
@@ -175,12 +176,9 @@ export default function EquipmentListScreen() {
 
       buttons.push({ text: 'Отмена', style: 'cancel' });
 
-      Alert.alert(
-        'Действия с оборудованием',
-        `Оборудование: ${item.model_name || 'Без названия'}`,
-        buttons,
-        { cancelable: true }
-      );
+      Alert.alert('Действия с оборудованием', `Оборудование: ${item.model_name || 'Без названия'}`, buttons, {
+        cancelable: true,
+      });
     } else {
       navigation.navigate('EditEquipment', { equipment: item });
     }
@@ -231,7 +229,7 @@ export default function EquipmentListScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={[styles.centerContainer, { paddingTop: topInset }]}>
         <ActivityIndicator size="large" color="#007AFF" />
         <Text style={styles.loadingText}>Загрузка оборудования...</Text>
       </View>
@@ -239,7 +237,7 @@ export default function EquipmentListScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: topInset }]}>
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
@@ -254,9 +252,7 @@ export default function EquipmentListScreen() {
         <TouchableOpacity style={styles.exportButton} onPress={handleExportPDF}>
           <Text style={styles.exportButtonText}>📄 Экспорт в PDF</Text>
         </TouchableOpacity>
-        <Text style={styles.exportHint}>
-          Будет создан PDF отчет со всеми {equipment.length} единицами оборудования
-        </Text>
+        <Text style={styles.exportHint}>Будет создан PDF отчет со всеми {equipment.length} единицами оборудования</Text>
       </View>
 
       <FlatList
@@ -266,6 +262,7 @@ export default function EquipmentListScreen() {
         refreshing={refreshing}
         onRefresh={handleRefresh}
         contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>Оборудование не найдено</Text>
@@ -283,7 +280,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
 
   searchContainer: {
-    padding: 15,
+    paddingHorizontal: 15,
+    paddingBottom: 15,
+    paddingTop: 10,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
@@ -321,7 +320,7 @@ const styles = StyleSheet.create({
   exportButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
   exportHint: { fontSize: 12, color: '#666', textAlign: 'center', fontStyle: 'italic' },
 
-  listContainer: { padding: 15 },
+  listContainer: { padding: 15, paddingBottom: 140 },
 
   equipmentItem: {
     backgroundColor: 'white',

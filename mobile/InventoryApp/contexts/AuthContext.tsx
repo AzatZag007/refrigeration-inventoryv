@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface User {
   id: number;
@@ -22,33 +23,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
-  // Загрузка сохраненных данных при запуске
+  // ✅ Загрузка из AsyncStorage при запуске
   useEffect(() => {
-    // В реальном приложении загружайте из SecureStore
-    const savedToken = null; // await SecureStore.getItemAsync('token');
-    const savedUser = null; // await SecureStore.getItemAsync('user');
-    
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
-    }
+    loadAuthData();
   }, []);
 
-  const login = (userData: User, authToken: string) => {
-    setUser(userData);
-    setToken(authToken);
-    // Сохраняем в SecureStore
-    // await SecureStore.setItemAsync('token', authToken);
-    // await SecureStore.setItemAsync('user', JSON.stringify(userData));
+  const loadAuthData = async () => {
+    try {
+      const savedToken = await AsyncStorage.getItem('token');
+      const savedUser = await AsyncStorage.getItem('user');
+      if (savedToken && savedUser) {
+        setToken(savedToken);
+        setUser(JSON.parse(savedUser));
+      }
+    } catch (error) {
+      console.error('Load auth error:', error);
+    }
   };
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    // Удаляем из SecureStore
-    // await SecureStore.deleteItemAsync('token');
-    // await SecureStore.deleteItemAsync('user');
+  const login = async (userData: User, authToken: string) => {
+    try {
+      await AsyncStorage.setItem('token', authToken); // ✅ Сохраняем!
+      await AsyncStorage.setItem('user', JSON.stringify(userData));
+      setUser(userData);
+      setToken(authToken);
+    } catch (error) {
+      console.error('Save auth error:', error);
+    }
   };
+
+  const logout = async () => {
+    try {
+      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('user');
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+      setToken(null);
+    }
+  };
+
 
   const hasPermission = (requiredRole: string) => {
     if (!user) return false;
@@ -65,12 +80,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return userLevel >= requiredLevel;
   };
 
-  return (
+return (
     <AuthContext.Provider value={{ user, token, login, logout, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );
-};
+};;
 
 export const useAuth = () => {
   const context = useContext(AuthContext);

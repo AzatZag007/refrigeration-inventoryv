@@ -3,5 +3,6 @@ export const API_CONFIG = {
   ENDPOINTS: {
     EQUIPMENT: '/api/equipment',
     AUTH: '/api/auth',  
+    ADMIN_USERS: '/api/admin/users',
   },
 } as const;

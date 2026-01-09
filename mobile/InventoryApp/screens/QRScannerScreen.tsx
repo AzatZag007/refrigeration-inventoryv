@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, StyleSheet, Alert, ActivityIndicator, Dimensions } from 'react-native';
+import {
+  Text,
+  View,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  Dimensions,
+  ScrollView,
+  Platform,
+} from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
+import { API_CONFIG } from '../config/apiConfig';
 
 const { width, height } = Dimensions.get('window');
 
@@ -15,58 +25,45 @@ export default function QRScannerScreen() {
       const { status } = await Camera.requestCameraPermissionsAsync();
       setHasPermission(status === 'granted');
     };
-
     getCameraPermissions();
   }, []);
 
   // Обработка сканирования QR-кода
-  const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
+  const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
     if (scanned) return;
-    
+
     setScanned(true);
     setLoading(true);
 
     try {
-      console.log('📱 Отсканирован QR-код:', data);
-      
-      // Отправляем данные QR-кода на сервер
-      const response = await fetch('http://192.168.1.186:5000/api/equipment/qr-scan', {
+      // ✅ используем конфиг, а не хардкод IP
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/equipment/qr-scan`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          qrData: data
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qrData: data }),
       });
 
-      const result = await response.json();
+      const text = await response.text();
+      const result = text ? JSON.parse(text) : null;
 
       if (response.ok) {
         Alert.alert(
           '✅ Оборудование найдено!',
-          `Модель: ${result.model_name}\nСерийный: ${result.serial_number}\nМестоположение: ${result.location}`,
-          [
-            { 
-              text: 'Отлично', 
-              onPress: () => setScanned(false) 
-            }
-          ]
+          `Модель: ${result?.model_name}\nСерийный: ${result?.serial_number}\nМестоположение: ${result?.location}`,
+          [{ text: 'Отлично', onPress: () => setScanned(false) }]
         );
       } else {
         Alert.alert(
           '❌ Ошибка',
-          result.error || 'Оборудование не найдено',
+          result?.error || result?.message || 'Оборудование не найдено',
           [{ text: 'OK', onPress: () => setScanned(false) }]
         );
       }
     } catch (error) {
       console.error('Ошибка при обработке QR-кода:', error);
-      Alert.alert(
-        '❌ Ошибка',
-        'Не удалось подключиться к серверу',
-        [{ text: 'OK', onPress: () => setScanned(false) }]
-      );
+      Alert.alert('❌ Ошибка', 'Не удалось подключиться к серверу', [
+        { text: 'OK', onPress: () => setScanned(false) },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -91,45 +88,42 @@ export default function QRScannerScreen() {
     );
   }
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#0000ff" />
-        <Text>Поиск оборудования...</Text>
-      </View>
-    );
-  }
-
+  // ✅ при лоадинге тоже оставим скролл (чтобы не прыгал layout)
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
       <Text style={styles.title}>📷 Сканирование QR-кода</Text>
       <Text style={styles.subtitle}>Наведите камеру на QR-код оборудования</Text>
-      
+
       <View style={styles.cameraContainer}>
         <CameraView
           style={styles.camera}
-          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-          barcodeScannerSettings={{
-            barcodeTypes: ['qr'],
-          }}
+          onBarcodeScanned={scanned || loading ? undefined : handleBarCodeScanned}
+          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
         />
-        
-        {/* Оверлей поверх камеры */}
+
         <View style={styles.overlay}>
           <View style={styles.scanFrame} />
-          <Text style={styles.scanText}>Сканирование...</Text>
+          <Text style={styles.scanText}>
+            {loading ? 'Поиск оборудования...' : scanned ? 'Обработka...' : 'Сканирование...'}
+          </Text>
+          {loading && <ActivityIndicator style={{ marginTop: 12 }} size="large" color="#fff" />}
         </View>
       </View>
-      
+
       <View style={styles.infoContainer}>
-        <Text style={styles.infoText}>
-          📍 Найдите QR-код на оборудовании и наведите камеру
-        </Text>
-        <Text style={styles.infoText}>
-          🔍 Автоматическое сканирование
-        </Text>
+        <Text style={styles.infoText}>📍 Найдите QR-код на оборудовании и наведите камеру</Text>
+        <Text style={styles.infoText}>🔍 Сканирование происходит автоматически</Text>
+        <Text style={styles.infoText}>↩️ После результата нажмите OK и сканируйте следующий</Text>
       </View>
-    </View>
+
+      {/* ✅ большой нижний отступ, чтобы контент не упирался в TabBar */}
+      <View style={{ height: 120 }} />
+    </ScrollView>
   );
 }
 
@@ -138,30 +132,40 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+
+  // ✅ contentContainerStyle нужен, чтобы реально была прокрутка
+  content: {
+    paddingTop: Platform.OS === 'ios' ? 60 : 50,
+  },
+
   title: {
     fontSize: 20,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginTop: 50,
     marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     color: 'gray',
+    paddingHorizontal: 16,
   },
+
   cameraContainer: {
-    flex: 1,
-    margin: 20,
+    // ✅ фиксируем высоту камеры, чтобы scroll работал нормально
+    height: Math.min(height * 0.55, 520),
+    marginHorizontal: 16,
     borderRadius: 15,
     overflow: 'hidden',
-    position: 'relative', // Для позиционирования оверлея
+    position: 'relative',
+    backgroundColor: '#000',
   },
   camera: {
     flex: 1,
     width: '100%',
   },
+
   overlay: {
     position: 'absolute',
     top: 0,
@@ -170,15 +174,15 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.30)',
   },
   scanFrame: {
-    width: 250,
-    height: 250,
+    width: Math.min(260, width - 80),
+    height: Math.min(260, width - 80),
     borderWidth: 2,
     borderColor: 'white',
     backgroundColor: 'transparent',
-    borderRadius: 10,
+    borderRadius: 12,
   },
   scanText: {
     color: 'white',
@@ -186,7 +190,9 @@ const styles = StyleSheet.create({
     marginTop: 20,
     textAlign: 'center',
     fontWeight: 'bold',
+    paddingHorizontal: 16,
   },
+
   center: {
     flex: 1,
     justifyContent: 'center',
@@ -204,15 +210,17 @@ const styles = StyleSheet.create({
     color: 'gray',
     textAlign: 'center',
   },
+
   infoContainer: {
-    padding: 20,
+    padding: 16,
     backgroundColor: 'white',
-    margin: 20,
+    marginHorizontal: 16,
+    marginTop: 16,
     borderRadius: 10,
   },
   infoText: {
     fontSize: 14,
-    marginBottom: 5,
+    marginBottom: 6,
     textAlign: 'center',
   },
 });
