@@ -1,4 +1,3 @@
-// EditEquipmentScreen.tsx - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -12,6 +11,7 @@ import {
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
+import { API_CONFIG } from '../config/apiConfig';  // ✅ ИЗМЕНЕНО: API_CONFIG!
 
 interface Equipment {
   id: number;
@@ -24,8 +24,6 @@ interface Equipment {
   created_at: string;
 }
 
-const API_BASE_URL = 'http://192.168.1.186:5000';
-
 export default function EditEquipmentScreen() {
   const route = useRoute();
   const navigation = useNavigation();
@@ -37,13 +35,13 @@ export default function EditEquipmentScreen() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // 🔥 Функция загрузки актуальных данных с сервера
+  // 🔥 Функция загрузки актуальных данных с сервера ✅ API_CONFIG!
   const loadEquipmentData = async () => {
     try {
       setLoading(true);
       console.log('🔄 Загрузка данных оборудования ID:', equipment.id);
       
-      const response = await fetch(`${API_BASE_URL}/api/equipment/${equipment.id}`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/equipment/${equipment.id}`, {
         headers: {
           'Authorization': `Bearer ${token}`, // 🔥 ДОБАВЛЯЕМ ТОКЕН
         },
@@ -75,14 +73,13 @@ export default function EditEquipmentScreen() {
     }
   };
 
-  // 🔥 Функция сохранения изменений - ИСПРАВЛЕННАЯ
+  // 🔥 Функция сохранения изменений ✅ API_CONFIG!
   const handleSave = async () => {
     if (!user || (user.role !== 'admin' && user.role !== 'technician')) {
       Alert.alert('Ошибка', 'У вас нет прав для редактирования оборудования');
       return;
     }
 
-    // 🔥 ПРОВЕРКА ТОКЕНА
     if (!token) {
       Alert.alert('Ошибка авторизации', 'Токен доступа отсутствует. Пожалуйста, войдите снова.');
       return;
@@ -93,11 +90,11 @@ export default function EditEquipmentScreen() {
       console.log('💾 Сохранение оборудования ID:', equipment.id);
       console.log('🔑 Используемый токен:', token ? 'присутствует' : 'отсутствует');
 
-      const response = await fetch(`${API_BASE_URL}/api/equipment/${equipment.id}`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/equipment/${equipment.id}`, {  // ✅ API_CONFIG!
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`, // 🔥 ПЕРЕДАЕМ ТОКЕН В ЗАГОЛОВКАХ
+          'Authorization': `Bearer ${token}`, // 🔥 ТОКЕН!
         },
         body: JSON.stringify({
           serial_number: equipment.serial_number,
@@ -114,7 +111,7 @@ export default function EditEquipmentScreen() {
         Alert.alert('Успех', 'Оборудование успешно обновлено');
         navigation.goBack();
       } else {
-        const errorData = await response.json();
+        const errorData = await response.text();  // text() вместо json() для безопасности
         console.error('❌ Ошибка сохранения:', response.status, errorData);
         
         if (response.status === 401) {
@@ -122,7 +119,7 @@ export default function EditEquipmentScreen() {
         } else if (response.status === 403) {
           Alert.alert('Ошибка прав доступа', 'У вас недостаточно прав для этого действия');
         } else {
-          Alert.alert('Ошибка', errorData.error || 'Не удалось обновить оборудование');
+          Alert.alert('Ошибка', errorData || 'Не удалось обновить оборудование');
         }
       }
     } catch (error) {
@@ -133,7 +130,6 @@ export default function EditEquipmentScreen() {
     }
   };
 
-  // 🔥 Загружаем актуальные данные при монтировании
   useEffect(() => {
     loadEquipmentData();
   }, []);
@@ -150,7 +146,6 @@ export default function EditEquipmentScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.form}>
-        {/* Поля формы */}
         <View style={styles.field}>
           <Text style={styles.label}>Серийный номер *</Text>
           <TextInput
@@ -206,7 +201,6 @@ export default function EditEquipmentScreen() {
           />
         </View>
 
-        {/* Информация только для чтения */}
         <View style={styles.infoSection}>
           <Text style={styles.infoLabel}>ID оборудования:</Text>
           <Text style={styles.infoValue}>{equipment.id}</Text>
@@ -226,7 +220,6 @@ export default function EditEquipmentScreen() {
           </Text>
         </View>
 
-        {/* Кнопка сохранения только для админов и техников */}
         {(user?.role === 'admin' || user?.role === 'technician') && (
           <TouchableOpacity
             style={[styles.saveButton, saving && styles.saveButtonDisabled]}

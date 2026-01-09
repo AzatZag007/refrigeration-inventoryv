@@ -1,32 +1,27 @@
+import { API_CONFIG } from '../config/apiConfig'; 
 import React, { useState } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  TextInput, 
-  Button, 
-  Alert, 
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  Button,
+  Alert,
   ScrollView,
-  TouchableOpacity 
+  TouchableOpacity,
 } from 'react-native';
-
-interface Equipment {
-  id: number;
-  serial_number: string;
-  model_name: string;
-  equipment_type: string;
-  manufacturer: string;
-  location: string;
-  status: string;
-}
+import { useAuth } from '../contexts/AuthContext';
 
 export default function AddEquipmentScreen({ navigation }: any) {
   const [serialNumber, setSerialNumber] = useState('');
   const [modelName, setModelName] = useState('');
-  const [equipmentType, setEquipmentType] = useState('Холодильник');
+  const [equipmentType, setEquipmentType] = useState<'Холодильник' | 'Морозильник'>('Холодильник');
   const [manufacturer, setManufacturer] = useState('');
   const [location, setLocation] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const { token, user } = useAuth(); // token нужен для POST
+
 
   const addEquipment = async () => {
     if (!serialNumber || !modelName || !manufacturer || !location) {
@@ -34,50 +29,60 @@ export default function AddEquipmentScreen({ navigation }: any) {
       return;
     }
 
+    // Если на сервере запрещено добавление без роли — лучше проверить сразу
+    if (user?.role !== 'admin' && user?.role !== 'technician') {
+      Alert.alert('Нет доступа', 'Добавлять оборудование могут только админ и техник');
+      return;
+    }
+
+    if (!token) {
+      Alert.alert('Нет доступа', 'Токен авторизации отсутствует. Перелогиньтесь.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const response = await fetch('http://192.168.1.186:5000/api/equipment', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.EQUIPMENT}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`, // Bearer token [web:199]
         },
         body: JSON.stringify({
-          serial_number: serialNumber,
-          model_name: modelName,
+          serial_number: serialNumber.trim(),
+          model_name: modelName.trim(),
           equipment_type: equipmentType,
-          manufacturer: manufacturer,
-          location: location
+          manufacturer: manufacturer.trim(),
+          location: location.trim(),
         }),
       });
 
-      const result = await response.json();
+      // response.json() может упасть, если сервер вернул HTML/пусто
+      const text = await response.text();
+      const result = text ? JSON.parse(text) : null;
 
       if (response.ok) {
         Alert.alert('Успех', 'Оборудование добавлено!');
-        // Очищаем форму
         setSerialNumber('');
         setModelName('');
-        setEquipmentType('Холодильник');
         setManufacturer('');
         setLocation('');
+        navigation.goBack();
       } else {
-        Alert.alert('Ошибка', result.error || 'Не удалось добавить оборудование');
+        Alert.alert('Ошибка', result?.error || result?.message || `HTTP ${response.status}`);
       }
     } catch (error) {
       console.error('Ошибка добавления:', error);
-      Alert.alert('Ошибка', 'Не удалось подключиться к серверу');
+      Alert.alert('Сеть', 'Не удалось подключиться к серверу');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <ScrollView 
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-    >
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <Text style={styles.title}>➕ Добавить оборудование</Text>
-      
+
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Серийный номер *</Text>
         <TextInput
@@ -85,6 +90,7 @@ export default function AddEquipmentScreen({ navigation }: any) {
           value={serialNumber}
           onChangeText={setSerialNumber}
           placeholder="Например: FRIDGE-003"
+          autoCapitalize="none"
         />
       </View>
 
@@ -101,22 +107,17 @@ export default function AddEquipmentScreen({ navigation }: any) {
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Тип оборудования</Text>
         <View style={styles.radioGroup}>
-          <TouchableOpacity 
-            style={[
-              styles.radioButton, 
-              equipmentType === 'Холодильник' && styles.radioButtonSelected
-            ]}
+          <TouchableOpacity
+            style={[styles.radioButton, equipmentType === 'Холодильник' && styles.radioButtonSelected]}
             onPress={() => setEquipmentType('Холодильник')}
           >
             <Text style={equipmentType === 'Холодильник' ? styles.radioButtonSelectedText : styles.radioButtonText}>
               ❄️ Холодильник
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[
-              styles.radioButton, 
-              equipmentType === 'Морозильник' && styles.radioButtonSelected
-            ]}
+
+          <TouchableOpacity
+            style={[styles.radioButton, equipmentType === 'Морозильник' && styles.radioButtonSelected]}
             onPress={() => setEquipmentType('Морозильник')}
           >
             <Text style={equipmentType === 'Морозильник' ? styles.radioButtonSelectedText : styles.radioButtonText}>
@@ -147,8 +148,8 @@ export default function AddEquipmentScreen({ navigation }: any) {
       </View>
 
       <View style={styles.buttonGroup}>
-        <Button 
-          title={loading ? "Добавление..." : "📥 Добавить оборудование"} 
+        <Button
+          title={loading ? 'Добавление...' : '📥 Добавить оборудование'}
           onPress={addEquipment}
           color="#28a745"
           disabled={loading}
@@ -162,40 +163,13 @@ export default function AddEquipmentScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  contentContainer: {
-    padding: 20,
-    paddingTop: 60,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 30,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: 'white',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    fontSize: 16,
-  },
-  radioGroup: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  contentContainer: { padding: 20, paddingTop: 60 },
+  title: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 30 },
+  inputGroup: { marginBottom: 20 },
+  label: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
+  input: { backgroundColor: 'white', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', fontSize: 16 },
+  radioGroup: { flexDirection: 'row', justifyContent: 'space-between' },
   radioButton: {
     flex: 1,
     padding: 12,
@@ -206,25 +180,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#dee2e6',
   },
-  radioButtonSelected: {
-    backgroundColor: '#007AFF',
-    borderColor: '#0056b3',
-  },
-  radioButtonText: {
-    color: '#333',
-  },
-  radioButtonSelectedText: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  buttonGroup: {
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  note: {
-    textAlign: 'center',
-    color: 'gray',
-    fontSize: 12,
-    marginTop: 5,
-  },
+  radioButtonSelected: { backgroundColor: '#007AFF', borderColor: '#0056b3' },
+  radioButtonText: { color: '#333' },
+  radioButtonSelectedText: { color: 'white', fontWeight: 'bold' },
+  buttonGroup: { marginTop: 20, marginBottom: 10 },
+  note: { textAlign: 'center', color: 'gray', fontSize: 12, marginTop: 5 },
 });

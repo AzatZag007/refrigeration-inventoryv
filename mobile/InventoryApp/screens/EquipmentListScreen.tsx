@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
+import { API_CONFIG } from '../config/apiConfig';
 import { ExportService } from '../services/exportService';
 
 interface Equipment {
@@ -24,20 +25,15 @@ interface Equipment {
   created_at: string;
 }
 
-const API_BASE_URL = 'http://192.168.1.186:5000';
-
 export default function EquipmentListScreen() {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const { user } = useAuth();
-  const navigation = useNavigation();
 
-  console.log('🔧 EquipmentListScreen mounted - user:', user?.role);
-  console.log('🔧 EquipmentListScreen - equipment count:', equipment.length);
+  const { user, token } = useAuth();
+  const navigation = useNavigation<any>(); // ✅ фикс TS "never" [web:221]
 
-  // Функция экспорта в PDF
   const handleExportPDF = async () => {
     if (!equipment || equipment.length === 0) {
       Alert.alert('Ошибка', 'Нет данных для экспорта');
@@ -51,7 +47,6 @@ export default function EquipmentListScreen() {
     }
   };
 
-  // Функция для печати QR-кода
   const handleShareQR = async (item: Equipment) => {
     if (user?.role !== 'admin' && user?.role !== 'technician') {
       Alert.alert('Ошибка', 'У вас нет прав для этой операции');
@@ -65,32 +60,34 @@ export default function EquipmentListScreen() {
     }
   };
 
-  // Функция загрузки оборудования
   const loadEquipment = async () => {
     try {
-      console.log('🔄 Начинаем загрузку оборудования...');
-      const response = await fetch(`${API_BASE_URL}/api/equipment`);
-      console.log('📡 Ответ получен, статус:', response.status);
-      
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.EQUIPMENT}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Оборудование загружено:', data.length, 'единиц');
-        
-        const cleanedData = data.map((item: any) => ({
-          id: item.id || 0,
-          serial_number: item.serial_number || '',
-          model_name: item.model_name || '',
-          equipment_type: item.equipment_type || '',
-          manufacturer: item.manufacturer || '',
-          location: item.location || '',
-          qr_code_data: item.qr_code_data || '',
-          created_at: item.created_at || new Date().toISOString()
+
+        const cleanedData: Equipment[] = (Array.isArray(data) ? data : []).map((item: any) => ({
+          id: item?.id ?? 0,
+          serial_number: item?.serial_number ?? '',
+          model_name: item?.model_name ?? '',
+          equipment_type: item?.equipment_type ?? '',
+          manufacturer: item?.manufacturer ?? '',
+          location: item?.location ?? '',
+          qr_code_data: item?.qr_code_data ?? '',
+          created_at: item?.created_at ?? new Date().toISOString(),
         }));
-        
+
         setEquipment(cleanedData);
       } else {
-        console.error('❌ Ошибка загрузки:', response.status);
-        Alert.alert('Ошибка', 'Не удалось загрузить оборудование');
+        const errorText = await response.text();
+        console.error('❌ Ошибка загрузки:', response.status, errorText);
+        Alert.alert('Ошибка', `Не удалось загрузить оборудование (HTTP ${response.status})`);
       }
     } catch (error) {
       console.error('❌ Ошибка сети:', error);
@@ -103,6 +100,7 @@ export default function EquipmentListScreen() {
 
   useEffect(() => {
     loadEquipment();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRefresh = () => {
@@ -114,10 +112,14 @@ export default function EquipmentListScreen() {
     navigation.navigate('EditEquipment', { equipment: item });
   };
 
-  // Функция удаления оборудования
-  const handleDeleteEquipment = async (item: Equipment) => {
+  const handleDeleteEquipment = (item: Equipment) => {
     if (user?.role !== 'admin') {
       Alert.alert('Ошибка', 'Только администраторы могут удалять оборудование');
+      return;
+    }
+
+    if (!token) {
+      Alert.alert('Ошибка', 'Нет токена авторизации. Перелогиньтесь.');
       return;
     }
 
@@ -125,108 +127,80 @@ export default function EquipmentListScreen() {
       'Удаление оборудования',
       `Вы уверены, что хотите удалить "${item.model_name || 'оборудование'}"?`,
       [
-        {
-          text: 'Отмена',
-          style: 'cancel'
-        },
+        { text: 'Отмена', style: 'cancel' },
         {
           text: 'Удалить',
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log(`🗑️ Удаляем оборудование ID: ${item.id}`);
-              const response = await fetch(`${API_BASE_URL}/api/equipment/${item.id}`, {
-                method: 'DELETE',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-              });
+              const response = await fetch(
+                `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.EQUIPMENT}/${item.id}`,
+                {
+                  method: 'DELETE',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                  },
+                }
+              );
 
               if (response.ok) {
-                console.log('✅ Оборудование удалено');
-                Alert.alert('Успех', 'Оборудование успешно удалено');
-                // Обновляем список
+                Alert.alert('Успех', 'Оборудование удалено');
                 loadEquipment();
               } else {
-                const errorData = await response.json();
-                console.error('❌ Ошибка удаления:', response.status, errorData);
-                Alert.alert('Ошибка', errorData.error || 'Не удалось удалить оборудование');
+                const errorText = await response.text();
+                console.error('❌ Ошибка удаления:', response.status, errorText);
+                Alert.alert('Ошибка', `HTTP ${response.status}: ${errorText}`);
               }
             } catch (error) {
-              console.error('❌ Ошибка сети при удалении:', error);
-              Alert.alert('Ошибка', 'Не удалось подключиться к серверу');
+              console.error('❌ Сеть:', error);
+              Alert.alert('Сеть', 'Не удалось удалить');
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
 
-const handleEquipmentLongPress = (item: Equipment) => {
-  if (user?.role === 'admin' || user?.role === 'technician') {
-    // 🔥 СОЗДАЕМ МАССИВ КНОПОК ПРАВИЛЬНО
-    const buttons = [
-      { 
-        text: 'Печать QR-кода', 
-        onPress: () => handleShareQR(item) 
-      },
-      { 
-        text: 'Редактировать', 
-        onPress: () => navigation.navigate('EditEquipment', { equipment: item }) 
+  const handleEquipmentLongPress = (item: Equipment) => {
+    if (user?.role === 'admin' || user?.role === 'technician') {
+      const buttons: any[] = [
+        { text: 'Печать QR-кода', onPress: () => handleShareQR(item) },
+        { text: 'Редактировать', onPress: () => navigation.navigate('EditEquipment', { equipment: item }) },
+      ];
+
+      if (user?.role === 'admin') {
+        buttons.push({ text: 'Удалить', style: 'destructive', onPress: () => handleDeleteEquipment(item) });
       }
-    ];
 
-    // 🔥 ДОБАВЛЯЕМ КНОПКУ УДАЛЕНИЯ ТОЛЬКО ДЛЯ АДМИНОВ
-    if (user?.role === 'admin') {
-      buttons.push({
-        text: 'Удалить',
-        style: 'destructive',
-        onPress: () => handleDeleteEquipment(item)
-      });
+      buttons.push({ text: 'Отмена', style: 'cancel' });
+
+      Alert.alert(
+        'Действия с оборудованием',
+        `Оборудование: ${item.model_name || 'Без названия'}`,
+        buttons,
+        { cancelable: true }
+      );
+    } else {
+      navigation.navigate('EditEquipment', { equipment: item });
     }
+  };
 
-    // 🔥 ВСЕГДА ДОБАВЛЯЕМ КНОПКУ ОТМЕНЫ ПОСЛЕДНЕЙ
-    buttons.push({ 
-      text: 'Отмена', 
-      style: 'cancel' 
-    });
+  const filteredEquipment = equipment.filter((item) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
 
-    Alert.alert(
-      'Действия с оборудованием',
-      `Оборудование: ${item.model_name || 'Без названия'}`,
-      buttons,
-      { cancelable: true } // 🔥 РАЗРЕШАЕМ ЗАКРЫТИЕ ПО КЛИКУ ВНЕ МЕНЮ
-    );
-  } else {
-    // Для обычных пользователей просто открываем просмотр
-    navigation.navigate('EditEquipment', { equipment: item });
-  }
-};
-
-  // Поиск оборудования
-  const filteredEquipment = equipment.filter(item => {
-    if (!item) return false;
-    
-    const query = searchQuery.toLowerCase();
-    
-    const model_name = String(item.model_name || '');
-    const equipment_type = String(item.equipment_type || '');
-    const serial_number = String(item.serial_number || '');
-    const location = String(item.location || '');
-    const manufacturer = String(item.manufacturer || '');
-    
     return (
-      model_name.toLowerCase().includes(query) ||
-      equipment_type.toLowerCase().includes(query) ||
-      serial_number.toLowerCase().includes(query) ||
-      location.toLowerCase().includes(query) ||
-      manufacturer.toLowerCase().includes(query)
+      (item.model_name || '').toLowerCase().includes(q) ||
+      (item.equipment_type || '').toLowerCase().includes(q) ||
+      (item.serial_number || '').toLowerCase().includes(q) ||
+      (item.location || '').toLowerCase().includes(q) ||
+      (item.manufacturer || '').toLowerCase().includes(q)
     );
   });
 
-  // Рендеринг элемента списка
   const renderEquipmentItem = ({ item }: { item: Equipment }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.equipmentItem}
       onPress={() => handleEquipmentPress(item)}
       onLongPress={() => handleEquipmentLongPress(item)}
@@ -237,17 +211,16 @@ const handleEquipmentLongPress = (item: Equipment) => {
           <Text style={styles.typeText}>{item.equipment_type || 'Не указан'}</Text>
         </View>
       </View>
-      
+
       <Text style={styles.equipmentManufacturer}>Производитель: {item.manufacturer || 'Не указан'}</Text>
       <Text style={styles.equipmentSerial}>Серийный: {item.serial_number || 'Не указан'}</Text>
       <Text style={styles.equipmentLocation}>📍 {item.location || 'Местоположение не указано'}</Text>
-      
+
       <View style={styles.equipmentFooter}>
         <Text style={styles.equipmentId}>ID: {item.id}</Text>
         <Text style={styles.qrCode}>🔗 {item.qr_code_data ? 'QR сгенерирован' : 'QR не сгенерирован'}</Text>
       </View>
 
-      {/* Бейдж для администратора */}
       {user?.role === 'admin' && (
         <View style={styles.adminBadge}>
           <Text style={styles.adminBadgeText}>Админ</Text>
@@ -276,13 +249,9 @@ const handleEquipmentLongPress = (item: Equipment) => {
         />
       </View>
 
-      {/* Упрощенный блок экспорта - только PDF */}
       <View style={styles.exportContainer}>
         <Text style={styles.exportTitle}>Экспорт данных</Text>
-        <TouchableOpacity 
-          style={styles.exportButton}
-          onPress={handleExportPDF}
-        >
+        <TouchableOpacity style={styles.exportButton} onPress={handleExportPDF}>
           <Text style={styles.exportButtonText}>📄 Экспорт в PDF</Text>
         </TouchableOpacity>
         <Text style={styles.exportHint}>
@@ -293,17 +262,14 @@ const handleEquipmentLongPress = (item: Equipment) => {
       <FlatList
         data={filteredEquipment}
         renderItem={renderEquipmentItem}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item) => String(item.id)}
         refreshing={refreshing}
         onRefresh={handleRefresh}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>Оборудование не найдено</Text>
-            <TouchableOpacity 
-              style={styles.addButton}
-              onPress={() => navigation.navigate('AddEquipment')}
-            >
+            <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('AddEquipment')}>
               <Text style={styles.addButtonText}>Добавить первое оборудование</Text>
             </TouchableOpacity>
           </View>
@@ -314,10 +280,8 @@ const handleEquipmentLongPress = (item: Equipment) => {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+
   searchContainer: {
     padding: 15,
     backgroundColor: 'white',
@@ -330,6 +294,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     fontSize: 16,
   },
+
   exportContainer: {
     backgroundColor: 'white',
     padding: 15,
@@ -343,12 +308,7 @@ const styles = StyleSheet.create({
     elevation: 2,
     alignItems: 'center',
   },
-  exportTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-  },
+  exportTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 10 },
   exportButton: {
     backgroundColor: '#007AFF',
     paddingHorizontal: 20,
@@ -358,20 +318,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  exportButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  exportHint: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  listContainer: {
-    padding: 15,
-  },
+  exportButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
+  exportHint: { fontSize: 12, color: '#666', textAlign: 'center', fontStyle: 'italic' },
+
+  listContainer: { padding: 15 },
+
   equipmentItem: {
     backgroundColor: 'white',
     padding: 20,
@@ -389,12 +340,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 8,
   },
-  equipmentName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    flex: 1,
-  },
+  equipmentName: { fontSize: 18, fontWeight: 'bold', color: '#333', flex: 1 },
   typeBadge: {
     backgroundColor: '#e3f2fd',
     paddingHorizontal: 10,
@@ -402,26 +348,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginLeft: 10,
   },
-  typeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1976d2',
-  },
-  equipmentManufacturer: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  equipmentSerial: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 4,
-  },
-  equipmentLocation: {
-    fontSize: 14,
-    color: '#007AFF',
-    marginBottom: 8,
-  },
+  typeText: { fontSize: 12, fontWeight: '600', color: '#1976d2' },
+
+  equipmentManufacturer: { fontSize: 14, color: '#666', marginBottom: 4 },
+  equipmentSerial: { fontSize: 14, color: '#888', marginBottom: 4 },
+  equipmentLocation: { fontSize: 14, color: '#007AFF', marginBottom: 8 },
+
   equipmentFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -430,14 +362,9 @@ const styles = StyleSheet.create({
     borderTopColor: '#f0f0f0',
     paddingTop: 8,
   },
-  equipmentId: {
-    fontSize: 12,
-    color: '#999',
-  },
-  qrCode: {
-    fontSize: 12,
-    color: '#999',
-  },
+  equipmentId: { fontSize: 12, color: '#999' },
+  qrCode: { fontSize: 12, color: '#999' },
+
   adminBadge: {
     position: 'absolute',
     top: 10,
@@ -447,41 +374,18 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
   },
-  adminBadgeText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
+  adminBadgeText: { color: 'white', fontSize: 10, fontWeight: 'bold' },
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f5f5f5',
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#999',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  addButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
+
+  emptyContainer: { alignItems: 'center', padding: 40 },
+  emptyText: { fontSize: 16, color: '#999', textAlign: 'center', marginBottom: 20 },
+  addButton: { backgroundColor: '#007AFF', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
+  addButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
 });

@@ -9,32 +9,30 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
 } from 'react-native';
-import { useAuth } from '../contexts/AuthContext'; // Добавьте этот импорт
+import { useAuth } from '../contexts/AuthContext';
+import { API_CONFIG } from '../config/apiConfig';
 
 interface LoginResponse {
-  error: string;
-  message: string;
-  user: {
+  error?: string;
+  message?: string;
+  user?: {
     id: number;
     username: string;
     email: string;
     role: string;
     full_name: string | null;
   };
-  token: string;
+  token?: string;
 }
-
-const API_BASE_URL = 'http://192.168.1.186:5000';
 
 export default function LoginScreen({ navigation }: any) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
-  
-  // Добавьте этот хук
+
   const { login } = useAuth();
 
   const handleAuth = async () => {
@@ -46,30 +44,29 @@ export default function LoginScreen({ navigation }: any) {
     setLoading(true);
     try {
       const endpoint = isLogin ? '/login' : '/register';
-      const response = await fetch(`${API_BASE_URL}/api/auth${endpoint}`, {
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTH}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username,
+          username: username.trim(),
           password,
-          ...(isLogin ? {} : { email: `${username}@inventory.com` })
+          ...(isLogin ? {} : { email: `${username.trim()}@inventory.com` }),
         }),
       });
 
-      const result: LoginResponse = await response.json();
+      // безопаснее: сервер может вернуть не-json
+      const text = await response.text();
+      const result: LoginResponse = text ? JSON.parse(text) : {};
 
-      if (response.ok) {
+      if (response.ok && result.user && result.token) {
         console.log('✅ Авторизация успешна:', result.user);
-        
-        // ВМЕСТО navigation.reset - используем login из контекста
         login(result.user, result.token);
-        
         Alert.alert('Успех', `Добро пожаловать, ${result.user.username}!`);
-        
       } else {
-        Alert.alert('Ошибка', result.error || 'Ошибка авторизации');
+        Alert.alert('Ошибка', result.error || result.message || `Ошибка авторизации (HTTP ${response.status})`);
       }
     } catch (error) {
       console.error('Ошибка авторизации:', error);
@@ -79,9 +76,8 @@ export default function LoginScreen({ navigation }: any) {
     }
   };
 
-  // Остальной код без изменений...
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
@@ -118,7 +114,7 @@ export default function LoginScreen({ navigation }: any) {
             />
           </View>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.authButton}
             onPress={handleAuth}
             disabled={loading}
@@ -132,19 +128,18 @@ export default function LoginScreen({ navigation }: any) {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.switchButton}
             onPress={() => setIsLogin(!isLogin)}
+            disabled={loading}
           >
             <Text style={styles.switchButtonText}>
-              {isLogin 
-                ? 'Нет аккаунта? Зарегистрироваться' 
-                : 'Уже есть аккаунт? Войти'
-              }
+              {isLogin
+                ? 'Нет аккаунта? Зарегистрироваться'
+                : 'Уже есть аккаунт? Войти'}
             </Text>
           </TouchableOpacity>
 
-          {/* Демо-аккаунты для тестирования */}
           <View style={styles.demoAccounts}>
             <Text style={styles.demoTitle}>Демо-аккаунты:</Text>
             <Text style={styles.demoAccount}>👑 Админ: admin / admin123</Text>
@@ -157,32 +152,13 @@ export default function LoginScreen({ navigation }: any) {
   );
 }
 
-// Стили остаются без изменений...
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#007AFF',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 18,
-    color: 'gray',
-    textAlign: 'center',
-  },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  scrollContainer: { flexGrow: 1, justifyContent: 'center', padding: 20 },
+  header: { alignItems: 'center', marginBottom: 40 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#007AFF', marginBottom: 10 },
+  subtitle: { fontSize: 18, color: 'gray', textAlign: 'center' },
+
   form: {
     backgroundColor: 'white',
     padding: 25,
@@ -193,15 +169,9 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 5,
   },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#333',
-  },
+
+  inputGroup: { marginBottom: 20 },
+  label: { fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#333' },
   input: {
     backgroundColor: '#f8f9fa',
     padding: 15,
@@ -210,6 +180,7 @@ const styles = StyleSheet.create({
     borderColor: '#e9ecef',
     fontSize: 16,
   },
+
   authButton: {
     backgroundColor: '#007AFF',
     padding: 15,
@@ -222,19 +193,11 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 3,
   },
-  authButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  switchButton: {
-    padding: 10,
-    alignItems: 'center',
-  },
-  switchButtonText: {
-    color: '#007AFF',
-    fontSize: 14,
-  },
+  authButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+
+  switchButton: { padding: 10, alignItems: 'center' },
+  switchButtonText: { color: '#007AFF', fontSize: 14 },
+
   demoAccounts: {
     marginTop: 25,
     paddingTop: 20,
