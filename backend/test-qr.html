@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Тест QR-кода оборудования</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .qr-container { 
+            margin: 20px 0; 
+            padding: 20px;
+            border: 2px solid #007AFF;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+        .info { 
+            background: #e9ecef; 
+            padding: 15px; 
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        #qr-image {
+            max-width: 300px;
+            height: auto;
+            border: 2px solid #333;
+            padding: 10px;
+            background: white;
+        }
+        button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Тест QR-кода оборудования</h1>
+        
+        <div class="info">
+            <h3>Информация об оборудовании:</h3>
+            <p><strong>ID:</strong> <input type="number" id="equipment-id" value="6" style="width: 60px;"></p>
+            <p><strong>Статус:</strong> <span id="status">Не загружено</span></p>
+        </div>
+
+        <div class="qr-container">
+            <h3>QR-код для сканирования:</h3>
+            <div id="qr-result">
+                <img id="qr-image" src="" alt="QR Code">
+            </div>
+            <p id="qr-info"></p>
+        </div>
+
+        <div>
+            <button onclick="loadQRCode()">🔄 Загрузить QR-код</button>
+            <button onclick="testScan()">📱 Тест сканирования</button>
+            <button onclick="window.location.reload()">🔄 Обновить страницу</button>
+        </div>
+
+        <div id="test-result" style="margin-top: 20px;"></div>
+    </div>
+
+    <script>
+        async function loadQRCode() {
+            const equipmentId = document.getElementById('equipment-id').value;
+            const statusElement = document.getElementById('status');
+            const qrInfoElement = document.getElementById('qr-info');
+            
+            statusElement.textContent = 'Загрузка...';
+            statusElement.className = '';
+            
+            try {
+                const response = await fetch(`http://localhost:5000/api/equipment/${equipmentId}/qr-code`);
+                const data = await response.json();
+                
+                if (data.qr_code) {
+                    document.getElementById('qr-image').src = data.qr_code;
+                    qrInfoElement.textContent = `QR-код для оборудования ID: ${data.equipment.id}, Модель: ${data.equipment.model_name}`;
+                    qrInfoElement.className = 'success';
+                    statusElement.textContent = 'Успешно загружено';
+                    statusElement.className = 'success';
+                    console.log('QR-код загружен:', data);
+                } else {
+                    qrInfoElement.textContent = 'QR-код не найден в ответе';
+                    qrInfoElement.className = 'error';
+                    statusElement.textContent = 'Ошибка';
+                    statusElement.className = 'error';
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+                qrInfoElement.textContent = 'Ошибка загрузки QR-кода: ' + error.message;
+                qrInfoElement.className = 'error';
+                statusElement.textContent = 'Ошибка';
+                statusElement.className = 'error';
+            }
+        }
+
+        async function testScan() {
+            const equipmentId = document.getElementById('equipment-id').value;
+            const resultElement = document.getElementById('test-result');
+            
+            resultElement.innerHTML = 'Тестирование сканирования...';
+            
+            try {
+                // Получаем данные QR-кода
+                const qrResponse = await fetch(`http://localhost:5000/api/equipment/${equipmentId}/qr-code`);
+                const qrData = await qrResponse.json();
+                
+                if (!qrData.qr_code) {
+                    resultElement.innerHTML = '<div class="error">❌ QR-код не найден</div>';
+                    return;
+                }
+
+                // Тестируем сканирование - отправляем данные QR-кода на сервер
+                const scanResponse = await fetch('http://localhost:5000/api/equipment/qr-scan', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        qrData: JSON.stringify({
+                            equipment_id: qrData.equipment.id,
+                            serial_number: qrData.equipment.serial_number,
+                            type: 'equipment'
+                        })
+                    }),
+                });
+
+                const scanResult = await scanResponse.json();
+
+                if (scanResponse.ok) {
+                    resultElement.innerHTML = `
+                        <div class="success">
+                            <h3>✅ Тест сканирования успешен!</h3>
+                            <p><strong>Оборудование найдено:</strong></p>
+                            <p>Модель: ${scanResult.model_name}</p>
+                            <p>Серийный номер: ${scanResult.serial_number}</p>
+                            <p>Местоположение: ${scanResult.location}</p>
+                            <p>Статус: ${scanResult.status}</p>
+                        </div>
+                    `;
+                } else {
+                    resultElement.innerHTML = `<div class="error">❌ Ошибка сканирования: ${scanResult.error}</div>`;
+                }
+                
+            } catch (error) {
+                console.error('Ошибка теста:', error);
+                resultElement.innerHTML = `<div class="error">❌ Ошибка тестирования: ${error.message}</div>`;
+            }
+        }
+
+        // Автоматически загружаем QR-код при открытии страницы
+        loadQRCode();
+    </script>
+</body>
+</html>
