@@ -16,21 +16,23 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use('/api/admin', require('./routes/admin'));
 
-// 🔐 ПОДКЛЮЧАЕМ МАРШРУТЫ АУТЕНТИФИКАЦИИ
+// ✅ 1. AUTH (login/register БЕЗ JWT!)
 app.use('/api/auth', authRoutes);
 
-// 🔐 НАСТРАИВАЕМ ПРОВЕРКУ ПРАВ ДОСТУПА ДЛЯ ОБОРУДОВАНИЯ
+// ✅ 2. ADMIN (JWT + admin check)
+app.use('/api/admin', authenticateToken, require('./routes/admin'));
+
+// ✅ 3. Equipment
 app.use('/api/equipment', (req, res, next) => {
   if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
-    // Для создания, редактирования, удаления - проверяем токен
     authenticateToken(req, res, next);
   } else {
-    // Для GET запросов (просмотр) - пропускаем без проверки
     next();
   }
 });
+app.use('/api/equipment', equipmentRoutes);
+
 
 // Подключаем маршруты оборудования
 app.use('/api/equipment', equipmentRoutes);
