@@ -95,22 +95,22 @@ function MainAppContent() {
         />
       )}
 
-    <Tab.Screen
-  name="Пользователи"
-  component={UsersScreen}
-  options={{
-    tabBarIcon: UsersIcon,
-    tabBarLabel: ({ color }) => (
-      <Text
-        style={{ color, fontSize: 9, lineHeight: 10, textAlign: 'center' }}
-        numberOfLines={2}
-        allowFontScaling={false}
-      >
-        Пользова{'\n'}тели
-      </Text>
-    ),
-  }}
-/>
+    {user?.role === 'admin' && (
+  <Tab.Screen
+    name="Users"
+    component={UsersScreen}
+    options={{
+      headerShown: false,
+      tabBarLabel: ({ focused }) => (
+        <Text style={{ fontSize: 10, color: focused ? '#007AFF' : 'gray' }}>
+          Пользова{'\n'}тели
+        </Text>
+      ),
+      tabBarIcon: ({ focused }) => <UsersIcon />,
+    }}
+  />
+)}
+
       <Tab.Screen
         name="Профиль"
         component={ProfileScreen}
