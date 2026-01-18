@@ -110,19 +110,17 @@ function MainTabs() {
 
 function MainAppContent() {
   return (
-    <Stack.Navigator>
-      <Stack.Screen 
-        name="MainTabs" 
-        component={MainTabs} 
-        options={{ headerShown: false }}
-      />
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen 
         name="EditEquipment" 
         component={EditEquipmentScreen}
-        options={{ 
-          title: 'Редактирование',
-          headerBackTitle: 'Назад'
-        }}
+        options={{ headerShown: true, title: 'Редактировать' }}
+      />
+      <Stack.Screen 
+        name="AddEquipment" 
+        component={AddEquipmentScreen}
+        options={{ headerShown: true, title: 'Добавить оборудование' }}
       />
     </Stack.Navigator>
   );

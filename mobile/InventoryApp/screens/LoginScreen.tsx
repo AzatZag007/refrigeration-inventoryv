@@ -35,46 +35,56 @@ export default function LoginScreen({ navigation }: any) {
 
   const { login } = useAuth();
 
-  const handleAuth = async () => {
-    if (!username || !password) {
-      Alert.alert('Ошибка', 'Заполните все поля');
+const handleAuth = async () => {
+  if (!username || !password) {
+    Alert.alert('Ошибка', 'Заполните все поля');
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const endpoint = isLogin ? '/login' : '/register';
+    const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTH}${endpoint}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        username: username.trim(),
+        password,
+        ...(isLogin ? {} : { email: `${username.trim()}@inventory.com` }),
+      }),
+    });
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      Alert.alert(
+        'Ошибка сервера',
+        `Сервер вернул HTML вместо JSON (статус ${response.status})`
+      );
       return;
     }
 
-    setLoading(true);
-    try {
-      const endpoint = isLogin ? '/login' : '/register';
+    const result: LoginResponse = await response.json();
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTH}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: username.trim(),
-          password,
-          ...(isLogin ? {} : { email: `${username.trim()}@inventory.com` }),
-        }),
-      });
-
-      // безопаснее: сервер может вернуть не-json
-      const text = await response.text();
-      const result: LoginResponse = text ? JSON.parse(text) : {};
-
-      if (response.ok && result.user && result.token) {
-        console.log('✅ Авторизация успешна:', result.user);
-        login(result.user, result.token);
-        Alert.alert('Успех', `Добро пожаловать, ${result.user.username}!`);
-      } else {
-        Alert.alert('Ошибка', result.error || result.message || `Ошибка авторизации (HTTP ${response.status})`);
-      }
-    } catch (error) {
-      console.error('Ошибка авторизации:', error);
-      Alert.alert('Ошибка', 'Не удалось подключиться к серверу');
-    } finally {
-      setLoading(false);
+    if (response.ok && result.user && result.token) {
+      login(result.user, result.token);
+      Alert.alert('Успех', `Добро пожаловать, ${result.user.username}!`);
+    } else {
+      Alert.alert('Ошибка', result.error || result.message || 'Ошибка авторизации');
     }
-  };
+  } catch (error: any) {
+    console.error('❌ Ошибка авторизации:', error);
+    Alert.alert('Ошибка', 'Не удалось подключиться к серверу');
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <KeyboardAvoidingView

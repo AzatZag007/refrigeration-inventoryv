@@ -1,5 +1,5 @@
 export const API_CONFIG = {
-  BASE_URL: 'http://192.168.3.173:5000',
+  BASE_URL: 'https://refrigeration-inventoryv.onrender.com', // ✅ БЕЗ слеша
   ENDPOINTS: {
     EQUIPMENT: '/api/equipment',
     AUTH: '/api/auth',  
