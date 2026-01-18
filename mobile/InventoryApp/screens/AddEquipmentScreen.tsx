@@ -25,60 +25,69 @@ export default function AddEquipmentScreen({ navigation }: any) {
 
   const { token, user } = useAuth();
 
-  const addEquipment = async () => {
-    if (!serialNumber || !modelName || !manufacturer || !location) {
-      Alert.alert('Ошибка', 'Заполните все поля');
-      return;
+ const addEquipment = async () => {
+  if (!serialNumber || !modelName || !manufacturer || !location) {
+    Alert.alert('Ошибка', 'Заполните все поля');
+    return;
+  }
+
+  // ✅ ДИАГНОСТИКА
+  console.log('🔑 Token:', token ? `${token.substring(0, 20)}...` : 'НЕТ ТОКЕНА');
+  console.log('👤 User:', user);
+  console.log('📍 URL:', `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.EQUIPMENT}`);
+
+  if (user?.role !== 'admin' && user?.role !== 'technician') {
+    Alert.alert('Нет доступа', 'Добавлять оборудование могут только админ и техник');
+    return;
+  }
+
+  if (!token) {
+    Alert.alert('Нет доступа', 'Токен авторизации отсутствует. Перелогиньтесь.');
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.EQUIPMENT}`;
+    
+    console.log('📤 Отправка запроса на:', url);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        serial_number: serialNumber.trim(),
+        model_name: modelName.trim(),
+        equipment_type: equipmentType,
+        manufacturer: manufacturer.trim(),
+        location: location.trim(),
+      }),
+    });
+
+    console.log('📊 Статус ответа:', response.status);
+    
+    const text = await response.text();
+    console.log('📄 Ответ сервера:', text);
+    
+    const result = text ? JSON.parse(text) : null;
+
+    if (response.ok) {
+      Alert.alert('Успех', 'Оборудование добавлено!');
+      // ... остальной код
+    } else {
+      Alert.alert('Ошибка', result?.error || result?.message || `HTTP ${response.status}`);
     }
+  } catch (error) {
+    console.error('❌ Ошибка добавления:', error);
+    Alert.alert('Сеть', 'Не удалось подключиться к серверу');
+  } finally {
+    setLoading(false);
+  }
+};
 
-    if (user?.role !== 'admin' && user?.role !== 'technician') {
-      Alert.alert('Нет доступа', 'Добавлять оборудование могут только админ и техник');
-      return;
-    }
-
-    if (!token) {
-      Alert.alert('Нет доступа', 'Токен авторизации отсутствует. Перелогиньтесь.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.EQUIPMENT}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          serial_number: serialNumber.trim(),
-          model_name: modelName.trim(),
-          equipment_type: equipmentType,
-          manufacturer: manufacturer.trim(),
-          location: location.trim(),
-        }),
-      });
-
-      const text = await response.text();
-      const result = text ? JSON.parse(text) : null;
-
-      if (response.ok) {
-        Alert.alert('Успех', 'Оборудование добавлено!');
-        setSerialNumber('');
-        setModelName('');
-        setManufacturer('');
-        setLocation('');
-        Keyboard.dismiss();
-        navigation.goBack();
-      } else {
-        Alert.alert('Ошибка', result?.error || result?.message || `HTTP ${response.status}`);
-      }
-    } catch (error) {
-      console.error('Ошибка добавления:', error);
-      Alert.alert('Сеть', 'Не удалось подключиться к серверу');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <KeyboardAvoidingView
