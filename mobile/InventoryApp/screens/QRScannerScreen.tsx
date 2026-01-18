@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
 import { API_CONFIG } from '../config/apiConfig';
+import { useAuth } from '../contexts/AuthContext'; // ← добавить
+import { useNavigation } from '@react-navigation/native'; // добавить
 
 const { width, height } = Dimensions.get('window');
 
@@ -18,7 +20,8 @@ export default function QRScannerScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
-
+  const { token } = useAuth(); // ← добавить после useState
+  const navigation = useNavigation<any>(); // добавить
   // Запрашиваем разрешение на использование камеры
   useEffect(() => {
     const getCameraPermissions = async () => {
@@ -32,27 +35,41 @@ export default function QRScannerScreen() {
   const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
     if (scanned) return;
 
-    setScanned(true);
+    if (!token) { // ← добавить проверку
+    Alert.alert('❌ Ошибка', 'Токен доступа отсутствует. Перезайдите в систему.');
+    return;
+  }
+  
+  setScanned(true);
     setLoading(true);
 
     try {
       // ✅ используем конфиг, а не хардкод IP
       const response = await fetch(`${API_CONFIG.BASE_URL}/api/equipment/qr-scan`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json','Authorization': `Bearer ${token}` },
         body: JSON.stringify({ qrData: data }),
       });
 
       const text = await response.text();
       const result = text ? JSON.parse(text) : null;
 
-      if (response.ok) {
-        Alert.alert(
-          '✅ Оборудование найдено!',
-          `Модель: ${result?.model_name}\nСерийный: ${result?.serial_number}\nМестоположение: ${result?.location}`,
-          [{ text: 'Отлично', onPress: () => setScanned(false) }]
-        );
-      } else {
+     if (response.ok) {
+  Alert.alert(
+    '✅ Оборудование найдено!',
+    `Модель: ${result?.model_name}\nСерийный: ${result?.serial_number}\nМестоположение: ${result?.location}`,
+    [
+      { text: 'Отмена', style: 'cancel', onPress: () => setScanned(false) },
+      { 
+        text: 'Редактировать', 
+        onPress: () => {
+          setScanned(false);
+          navigation.navigate('EditEquipment', { equipment: result });
+        }
+      }
+    ]
+  );
+} else {
         Alert.alert(
           '❌ Ошибка',
           result?.error || result?.message || 'Оборудование не найдено',

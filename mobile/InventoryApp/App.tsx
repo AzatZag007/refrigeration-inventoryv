@@ -24,101 +24,110 @@ const AddIcon = () => <Text style={{ fontSize: 24 }}>➕</Text>;
 const UsersIcon = () => <Text style={{ fontSize: 24 }}>👥</Text>;
 const ProfileIcon = () => <Text style={{ fontSize: 24 }}>👤</Text>;
 
-function MainAppContent() {
+function MainTabs() {
   const { user } = useAuth();
-
+  
   return (
-    <Tab.Navigator
-  screenOptions={{
-    tabBarStyle: {
-      backgroundColor: '#f8f9fa',
-      borderTopWidth: 1,
-      borderTopColor: '#dee2e6',
-      paddingBottom: Platform.OS === 'android' ? 35 : 25,
-      height: Platform.OS === 'android' ? 95 : 85,
-      paddingHorizontal: 8,
-      position: 'absolute',
-      bottom: 0,
-    },
-    tabBarActiveTintColor: '#007AFF',
-    tabBarInactiveTintColor: '#6c757d',
-
-    // ✅ делаем меньше + фиксируем высоту строки
-    tabBarLabelStyle: {
-      fontSize: Platform.OS === 'android' ? 9 : 10,
-      lineHeight: Platform.OS === 'android' ? 10 : 12,
-      fontWeight: '500',
-      marginBottom: Platform.OS === 'android' ? 1 : 3,
-    },
-
-    // ✅ запрещаем “увеличение” текста из системных настроек
-    tabBarAllowFontScaling: false,
-
-    tabBarItemStyle: {
-      paddingBottom: Platform.OS === 'android' ? 6 : 4,
-      paddingHorizontal: Platform.OS === 'android' ? 10 : 12,
-      minHeight: Platform.OS === 'android' ? 48 : 52,
-    },
-    headerShown: false,
-  }}
->
-     <Tab.Screen
-  name="Оборудование"
-  component={EquipmentListScreen}
-  options={{
-    tabBarIcon: EquipmentIcon,
-    tabBarLabel: ({ color }) => (
-      <Text
-        style={{ color, fontSize: 9, lineHeight: 10, textAlign: 'center' }}
-        numberOfLines={2}
-        allowFontScaling={false}
-      >
-        Оборудо{'\n'}вание
-      </Text>
-    ),
-  }}
-/>
-
+    <Tab.Navigator>
+      <Tab.Screen
+        name="Equipment"
+        component={EquipmentListScreen}
+        options={{
+          headerShown: false,
+          tabBarLabel: ({ focused }) => (
+            <Text style={{ fontSize: 10, color: focused ? '#007AFF' : 'gray' }}>
+              Оборудо{'\n'}вание
+            </Text>
+          ),
+          tabBarIcon: EquipmentIcon,
+        }}
+      />
+      
       {(user?.role === 'admin' || user?.role === 'technician') && (
         <Tab.Screen
-          name="Сканировать"
+          name="Scanner"
           component={QRScannerScreen}
-          options={{ tabBarIcon: ScanIcon, tabBarLabel: 'Сканер' }}
+          options={{
+            headerShown: false,
+            tabBarLabel: ({ focused }) => (
+              <Text style={{ fontSize: 10, color: focused ? '#007AFF' : 'gray' }}>
+                Сканиро{'\n'}вание
+              </Text>
+            ),
+            tabBarIcon: ScanIcon,
+          }}
         />
       )}
 
       {(user?.role === 'admin' || user?.role === 'technician') && (
         <Tab.Screen
-          name="Добавить"
+          name="Add"
           component={AddEquipmentScreen}
-          options={{ tabBarIcon: AddIcon, tabBarLabel: 'Добавить' }}
+          options={{
+            headerShown: false,
+            tabBarLabel: ({ focused }) => (
+              <Text style={{ fontSize: 10, color: focused ? '#007AFF' : 'gray' }}>
+                Добавить
+              </Text>
+            ),
+            tabBarIcon: AddIcon,
+          }}
         />
       )}
 
-    {user?.role === 'admin' && (
-  <Tab.Screen
-    name="Users"
-    component={UsersScreen}
-    options={{
-      headerShown: false,
-      tabBarLabel: ({ focused }) => (
-        <Text style={{ fontSize: 10, color: focused ? '#007AFF' : 'gray' }}>
-          Пользова{'\n'}тели
-        </Text>
-      ),
-      tabBarIcon: ({ focused }) => <UsersIcon />,
-    }}
-  />
-)}
+      {user?.role === 'admin' && (
+        <Tab.Screen
+          name="Users"
+          component={UsersScreen}
+          options={{
+            headerShown: false,
+            tabBarLabel: ({ focused }) => (
+              <Text style={{ fontSize: 10, color: focused ? '#007AFF' : 'gray' }}>
+                Пользова{'\n'}тели
+              </Text>
+            ),
+            tabBarIcon: UsersIcon,
+          }}
+        />
+      )}
 
       <Tab.Screen
-        name="Профиль"
+        name="Profile"
         component={ProfileScreen}
-        options={{ tabBarIcon: ProfileIcon, tabBarLabel: 'Профиль' }}
+        options={{
+          headerShown: false,
+          tabBarLabel: ({ focused }) => (
+            <Text style={{ fontSize: 10, color: focused ? '#007AFF' : 'gray' }}>
+              Профиль
+            </Text>
+          ),
+          tabBarIcon: ProfileIcon,
+        }}
       />
     </Tab.Navigator>
   );
 }
+
+function MainAppContent() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen 
+        name="MainTabs" 
+        component={MainTabs} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="EditEquipment" 
+        component={EditEquipmentScreen}
+        options={{ 
+          title: 'Редактирование',
+          headerBackTitle: 'Назад'
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
 
 function AppNavigator() {
   const { user } = useAuth();
