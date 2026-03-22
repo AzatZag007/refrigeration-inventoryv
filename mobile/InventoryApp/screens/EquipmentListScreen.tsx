@@ -12,6 +12,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { API_CONFIG } from '../config/apiConfig';
 import { ExportService } from '../services/exportService';
@@ -35,9 +36,11 @@ export default function EquipmentListScreen() {
 
   const { user, token } = useAuth();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
 
-  // ✅ отступ, чтобы UI не залезал под системный статус-бар на Android (edge-to-edge)
-  const topInset = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
+  // ✅ Правильные отступы для всех устройств
+  const topInset = Platform.OS === 'ios' ? insets.top : (StatusBar.currentHeight ?? 0);
+  const bottomInset = insets.bottom;
 
   const handleExportPDF = async () => {
     if (!equipment || equipment.length === 0) {
@@ -105,7 +108,6 @@ export default function EquipmentListScreen() {
 
   useEffect(() => {
     loadEquipment();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRefresh = () => {
@@ -128,57 +130,73 @@ export default function EquipmentListScreen() {
       return;
     }
 
-    Alert.alert('Удаление оборудования', `Вы уверены, что хотите удалить "${item.model_name || 'оборудование'}"?`, [
-      { text: 'Отмена', style: 'cancel' },
-      {
-        text: 'Удалить',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const response = await fetch(
-              `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.EQUIPMENT}/${item.id}`,
-              {
-                method: 'DELETE',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${token}`,
-                },
-              }
-            );
+    Alert.alert(
+      'Удаление оборудования',
+      `Вы уверены, что хотите удалить "${item.model_name || 'оборудование'}"?`,
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Удалить',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await fetch(
+                `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.EQUIPMENT}/${item.id}`,
+                {
+                  method: 'DELETE',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                  },
+                }
+              );
 
-            if (response.ok) {
-              Alert.alert('Успех', 'Оборудование удалено');
-              loadEquipment();
-            } else {
-              const errorText = await response.text();
-              console.error('❌ Ошибка удаления:', response.status, errorText);
-              Alert.alert('Ошибка', `HTTP ${response.status}: ${errorText}`);
+              if (response.ok) {
+                Alert.alert('Успех', 'Оборудование удалено');
+                loadEquipment();
+              } else {
+                const errorText = await response.text();
+                console.error('❌ Ошибка удаления:', response.status, errorText);
+                Alert.alert('Ошибка', `HTTP ${response.status}: ${errorText}`);
+              }
+            } catch (error) {
+              console.error('❌ Сеть:', error);
+              Alert.alert('Сеть', 'Не удалось удалить');
             }
-          } catch (error) {
-            console.error('❌ Сеть:', error);
-            Alert.alert('Сеть', 'Не удалось удалить');
-          }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   const handleEquipmentLongPress = (item: Equipment) => {
     if (user?.role === 'admin' || user?.role === 'technician') {
       const buttons: any[] = [
         { text: 'Печать QR-кода', onPress: () => handleShareQR(item) },
-        { text: 'Редактировать', onPress: () => navigation.navigate('EditEquipment', { equipment: item }) },
+        {
+          text: 'Редактировать',
+          onPress: () => navigation.navigate('EditEquipment', { equipment: item }),
+        },
       ];
 
       if (user?.role === 'admin') {
-        buttons.push({ text: 'Удалить', style: 'destructive', onPress: () => handleDeleteEquipment(item) });
+        buttons.push({
+          text: 'Удалить',
+          style: 'destructive',
+          onPress: () => handleDeleteEquipment(item),
+        });
       }
 
       buttons.push({ text: 'Отмена', style: 'cancel' });
 
-      Alert.alert('Действия с оборудованием', `Оборудование: ${item.model_name || 'Без названия'}`, buttons, {
-        cancelable: true,
-      });
+      Alert.alert(
+        'Действия с оборудованием',
+        `Оборудование: ${item.model_name || 'Без названия'}`,
+        buttons,
+        {
+          cancelable: true,
+        }
+      );
     } else {
       navigation.navigate('EditEquipment', { equipment: item });
     }
@@ -202,21 +220,28 @@ export default function EquipmentListScreen() {
       style={styles.equipmentItem}
       onPress={() => handleEquipmentPress(item)}
       onLongPress={() => handleEquipmentLongPress(item)}
+      activeOpacity={0.7}
     >
       <View style={styles.equipmentHeader}>
-        <Text style={styles.equipmentName}>{item.model_name || 'Без названия'}</Text>
+        <Text style={styles.equipmentName} numberOfLines={2}>
+          {item.model_name || 'Без названия'}
+        </Text>
         <View style={styles.typeBadge}>
           <Text style={styles.typeText}>{item.equipment_type || 'Не указан'}</Text>
         </View>
       </View>
 
-      <Text style={styles.equipmentManufacturer}>Производитель: {item.manufacturer || 'Не указан'}</Text>
+      <Text style={styles.equipmentManufacturer}>
+        Производитель: {item.manufacturer || 'Не указан'}
+      </Text>
       <Text style={styles.equipmentSerial}>Серийный: {item.serial_number || 'Не указан'}</Text>
       <Text style={styles.equipmentLocation}>📍 {item.location || 'Местоположение не указано'}</Text>
 
       <View style={styles.equipmentFooter}>
         <Text style={styles.equipmentId}>ID: {item.id}</Text>
-        <Text style={styles.qrCode}>🔗 {item.qr_code_data ? 'QR сгенерирован' : 'QR не сгенерирован'}</Text>
+        <Text style={styles.qrCode}>
+          🔗 {item.qr_code_data ? 'QR сгенерирован' : 'QR не сгенерирован'}
+        </Text>
       </View>
 
       {user?.role === 'admin' && (
@@ -242,8 +267,11 @@ export default function EquipmentListScreen() {
         <TextInput
           style={styles.searchInput}
           placeholder="🔍 Поиск оборудования..."
+          placeholderTextColor="#999"
           value={searchQuery}
           onChangeText={setSearchQuery}
+          clearButtonMode="while-editing"
+          returnKeyType="search"
         />
       </View>
 
@@ -252,7 +280,9 @@ export default function EquipmentListScreen() {
         <TouchableOpacity style={styles.exportButton} onPress={handleExportPDF}>
           <Text style={styles.exportButtonText}>📄 Экспорт в PDF</Text>
         </TouchableOpacity>
-        <Text style={styles.exportHint}>Будет создан PDF отчет со всеми {equipment.length} единицами оборудования</Text>
+        <Text style={styles.exportHint}>
+          Будет создан PDF отчет со всеми {equipment.length} единицами оборудования
+        </Text>
       </View>
 
       <FlatList
@@ -261,12 +291,18 @@ export default function EquipmentListScreen() {
         keyExtractor={(item) => String(item.id)}
         refreshing={refreshing}
         onRefresh={handleRefresh}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={[
+          styles.listContainer,
+          { paddingBottom: bottomInset + 100 } // Добавляем отступ снизу для Android
+        ]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>Оборудование не найдено</Text>
-            <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('AddEquipment')}>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => navigation.navigate('AddEquipment')}
+            >
               <Text style={styles.addButtonText}>Добавить первое оборудование</Text>
             </TouchableOpacity>
           </View>
@@ -277,7 +313,10 @@ export default function EquipmentListScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
 
   searchContainer: {
     paddingHorizontal: 15,
@@ -292,6 +331,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
     fontSize: 16,
+    color: '#333',
   },
 
   exportContainer: {
@@ -307,7 +347,12 @@ const styles = StyleSheet.create({
     elevation: 2,
     alignItems: 'center',
   },
-  exportTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 10 },
+  exportTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
   exportButton: {
     backgroundColor: '#007AFF',
     paddingHorizontal: 20,
@@ -317,10 +362,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  exportButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
-  exportHint: { fontSize: 12, color: '#666', textAlign: 'center', fontStyle: 'italic' },
+  exportButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  exportHint: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
 
-  listContainer: { padding: 15, paddingBottom: 140 },
+  listContainer: {
+    padding: 15,
+  },
 
   equipmentItem: {
     backgroundColor: 'white',
@@ -339,19 +395,40 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 8,
   },
-  equipmentName: { fontSize: 18, fontWeight: 'bold', color: '#333', flex: 1 },
+  equipmentName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+    marginRight: 10,
+  },
   typeBadge: {
     backgroundColor: '#e3f2fd',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    marginLeft: 10,
   },
-  typeText: { fontSize: 12, fontWeight: '600', color: '#1976d2' },
+  typeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1976d2',
+  },
 
-  equipmentManufacturer: { fontSize: 14, color: '#666', marginBottom: 4 },
-  equipmentSerial: { fontSize: 14, color: '#888', marginBottom: 4 },
-  equipmentLocation: { fontSize: 14, color: '#007AFF', marginBottom: 8 },
+  equipmentManufacturer: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  equipmentSerial: {
+    fontSize: 14,
+    color: '#888',
+    marginBottom: 4,
+  },
+  equipmentLocation: {
+    fontSize: 14,
+    color: '#007AFF',
+    marginBottom: 8,
+  },
 
   equipmentFooter: {
     flexDirection: 'row',
@@ -361,8 +438,14 @@ const styles = StyleSheet.create({
     borderTopColor: '#f0f0f0',
     paddingTop: 8,
   },
-  equipmentId: { fontSize: 12, color: '#999' },
-  qrCode: { fontSize: 12, color: '#999' },
+  equipmentId: {
+    fontSize: 12,
+    color: '#999',
+  },
+  qrCode: {
+    fontSize: 12,
+    color: '#999',
+  },
 
   adminBadge: {
     position: 'absolute',
@@ -373,7 +456,11 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
   },
-  adminBadgeText: { color: 'white', fontSize: 10, fontWeight: 'bold' },
+  adminBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
 
   centerContainer: {
     flex: 1,
@@ -381,10 +468,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f5f5f5',
   },
-  loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
 
-  emptyContainer: { alignItems: 'center', padding: 40 },
-  emptyText: { fontSize: 16, color: '#999', textAlign: 'center', marginBottom: 20 },
-  addButton: { backgroundColor: '#007AFF', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
-  addButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
-});
+  emptyContainer: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  addButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  addButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});EquipmentListScreen

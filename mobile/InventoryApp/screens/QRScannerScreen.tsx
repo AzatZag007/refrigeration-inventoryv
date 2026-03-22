@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Text,
   View,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   Dimensions,
   ScrollView,
@@ -11,8 +10,9 @@ import {
 } from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
 import { API_CONFIG } from '../config/apiConfig';
-import { useAuth } from '../contexts/AuthContext'; // ← добавить
-import { useNavigation } from '@react-navigation/native'; // добавить
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import CustomAlertModal from '../components/CustomAlertModal'; // Импортируем кастомный модал
 
 const { width, height } = Dimensions.get('window');
 
@@ -20,8 +20,23 @@ export default function QRScannerScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { token } = useAuth(); // ← добавить после useState
-  const navigation = useNavigation<any>(); // добавить
+  const [cameraActive, setCameraActive] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Состояния для модального окна
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalConfig, setModalConfig] = useState({
+    title: '',
+    message: '',
+    buttons: [] as { text: string; onPress: () => void; style?: 'default' | 'cancel' | 'destructive' }[],
+  });
+  
+  const [scanResult, setScanResult] = useState<any>(null); // Сохраняем результат сканирования
+  
+  const { token } = useAuth();
+  const navigation = useNavigation<any>();
+  const cameraRef = useRef<CameraView>(null);
+
   // Запрашиваем разрешение на использование камеры
   useEffect(() => {
     const getCameraPermissions = async () => {
@@ -31,59 +46,135 @@ export default function QRScannerScreen() {
     getCameraPermissions();
   }, []);
 
+  // Сброс состояния при возврате на экран
+  useFocusEffect(
+    React.useCallback(() => {
+      // Сбрасываем все состояния при возврате на экран
+      setScanned(false);
+      setLoading(false);
+      setCameraActive(true);
+      setIsProcessing(false);
+      setModalVisible(false);
+      
+      return () => {
+        // При уходе с экрана отключаем камеру
+        setCameraActive(false);
+        setModalVisible(false);
+      };
+    }, [])
+  );
+
+  // Функция для показа кастомного модального окна
+  const showAlert = (title: string, message: string, buttons: any[]) => {
+    setModalConfig({ title, message, buttons });
+    setModalVisible(true);
+  };
+
+  // Закрытие модального окна и сброс камеры
+  const closeModalAndReset = () => {
+    setModalVisible(false);
+    // Небольшая задержка перед включением камеры
+    setTimeout(() => {
+      resetCameraState();
+    }, 100);
+  };
+
   // Обработка сканирования QR-кода
   const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
-    if (scanned) return;
+    if (scanned || loading || isProcessing) return;
 
-    if (!token) { // ← добавить проверку
-    Alert.alert('❌ Ошибка', 'Токен доступа отсутствует. Перезайдите в систему.');
-    return;
-  }
-  
-  setScanned(true);
+    if (!token) {
+      showAlert('❌ Ошибка', 'Токен доступа отсутствует. Перезайдите в систему.', [
+        { text: 'OK', onPress: () => closeModalAndReset() }
+      ]);
+      return;
+    }
+    
+    setIsProcessing(true);
+    setScanned(true);
     setLoading(true);
+    setCameraActive(false);
+    
+    // Останавливаем превью камеры если возможно
+    if (cameraRef.current) {
+      try {
+        // @ts-ignore
+        if (cameraRef.current.pausePreview) {
+          // @ts-ignore
+          cameraRef.current.pausePreview();
+        }
+      } catch (e) {
+        // Игнорируем
+      }
+    }
 
     try {
-      // ✅ используем конфиг, а не хардкод IP
       const response = await fetch(`${API_CONFIG.BASE_URL}/api/equipment/qr-scan`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json','Authorization': `Bearer ${token}` },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify({ qrData: data }),
       });
 
       const text = await response.text();
       const result = text ? JSON.parse(text) : null;
 
-     if (response.ok) {
-  Alert.alert(
-    '✅ Оборудование найдено!',
-    `Модель: ${result?.model_name}\nСерийный: ${result?.serial_number}\nМестоположение: ${result?.location}`,
-    [
-      { text: 'Отмена', style: 'cancel', onPress: () => setScanned(false) },
-      { 
-        text: 'Редактировать', 
-        onPress: () => {
-          setScanned(false);
-          navigation.navigate('EditEquipment', { equipment: result });
-        }
-      }
-    ]
-  );
-} else {
-        Alert.alert(
+      if (response.ok) {
+        setScanResult(result);
+        
+        showAlert(
+          '✅ Оборудование найдено!',
+          `Модель: ${result?.model_name}\nСерийный: ${result?.serial_number}\nМестоположение: ${result?.location}`,
+          [
+            {
+              text: 'Отмена',
+              style: 'cancel',
+              onPress: () => {
+                closeModalAndReset();
+              }
+            },
+            {
+              text: 'Редактировать',
+              onPress: () => {
+                setModalVisible(false);
+                // Сразу переходим к редактированию, камера останется выключенной
+                navigation.navigate('EditEquipment', { equipment: result });
+                // Сбрасываем состояние после навигации
+                setTimeout(() => {
+                  resetCameraState();
+                }, 500);
+              }
+            }
+          ]
+        );
+      } else {
+        showAlert(
           '❌ Ошибка',
           result?.error || result?.message || 'Оборудование не найдено',
-          [{ text: 'OK', onPress: () => setScanned(false) }]
+          [{ text: 'OK', onPress: () => closeModalAndReset() }]
         );
       }
     } catch (error) {
       console.error('Ошибка при обработке QR-кода:', error);
-      Alert.alert('❌ Ошибка', 'Не удалось подключиться к серверу', [
-        { text: 'OK', onPress: () => setScanned(false) },
-      ]);
+      showAlert(
+        '❌ Ошибка',
+        'Не удалось подключиться к серверу',
+        [{ text: 'OK', onPress: () => closeModalAndReset() }]
+      );
     } finally {
       setLoading(false);
+      setIsProcessing(false);
     }
+  };
+
+  // Функция сброса состояния камеры
+  const resetCameraState = () => {
+    setScanned(false);
+    setCameraActive(true);
+    setIsProcessing(false);
+    setScanResult(null);
   };
 
   if (hasPermission === null) {
@@ -105,42 +196,55 @@ export default function QRScannerScreen() {
     );
   }
 
-  // ✅ при лоадинге тоже оставим скролл (чтобы не прыгал layout)
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      bounces={false}
-    >
-      <Text style={styles.title}>📷 Сканирование QR-кода</Text>
-      <Text style={styles.subtitle}>Наведите камеру на QR-код оборудования</Text>
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        <Text style={styles.title}>📷 Сканирование QR-кода</Text>
+        <Text style={styles.subtitle}>Наведите камеру на QR-код оборудования</Text>
 
-      <View style={styles.cameraContainer}>
-        <CameraView
-          style={styles.camera}
-          onBarcodeScanned={scanned || loading ? undefined : handleBarCodeScanned}
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-        />
+        <View style={styles.cameraContainer}>
+          {cameraActive && !isProcessing && (
+            <CameraView
+              ref={cameraRef}
+              style={styles.camera}
+              onBarcodeScanned={scanned || loading || isProcessing ? undefined : handleBarCodeScanned}
+              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              enableTorch={false}
+              zoom={0}
+            />
+          )}
 
-        <View style={styles.overlay}>
-          <View style={styles.scanFrame} />
-          <Text style={styles.scanText}>
-            {loading ? 'Поиск оборудования...' : scanned ? 'Обработka...' : 'Сканирование...'}
-          </Text>
-          {loading && <ActivityIndicator style={{ marginTop: 12 }} size="large" color="#fff" />}
+          <View style={styles.overlay}>
+            <View style={styles.scanFrame} />
+            <Text style={styles.scanText}>
+              {loading ? 'Поиск оборудования...' : scanned ? 'Обработка...' : 'Сканирование...'}
+            </Text>
+            {loading && <ActivityIndicator style={{ marginTop: 12 }} size="large" color="#fff" />}
+          </View>
         </View>
-      </View>
 
-      <View style={styles.infoContainer}>
-        <Text style={styles.infoText}>📍 Найдите QR-код на оборудовании и наведите камеру</Text>
-        <Text style={styles.infoText}>🔍 Сканирование происходит автоматически</Text>
-        <Text style={styles.infoText}>↩️ После результата нажмите OK и сканируйте следующий</Text>
-      </View>
+        <View style={styles.infoContainer}>
+          <Text style={styles.infoText}>📍 Найдите QR-код на оборудовании и наведите камеру</Text>
+          <Text style={styles.infoText}>🔍 Сканирование происходит автоматически</Text>
+          <Text style={styles.infoText}>↩️ После результата нажмите OK и сканируйте следующий</Text>
+        </View>
 
-      {/* ✅ большой нижний отступ, чтобы контент не упирался в TabBar */}
-      <View style={{ height: 120 }} />
-    </ScrollView>
+        <View style={{ height: 120 }} />
+      </ScrollView>
+
+      {/* Кастомное модальное окно вместо Alert */}
+      <CustomAlertModal
+        visible={modalVisible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        buttons={modalConfig.buttons}
+      />
+    </>
   );
 }
 
@@ -150,7 +254,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
 
-  // ✅ contentContainerStyle нужен, чтобы реально была прокрутка
   content: {
     paddingTop: Platform.OS === 'ios' ? 60 : 50,
   },
@@ -170,7 +273,6 @@ const styles = StyleSheet.create({
   },
 
   cameraContainer: {
-    // ✅ фиксируем высоту камеры, чтобы scroll работал нормально
     height: Math.min(height * 0.55, 520),
     marginHorizontal: 16,
     borderRadius: 15,

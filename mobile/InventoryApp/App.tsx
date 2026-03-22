@@ -1,9 +1,10 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createNativeStackNavigator, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, Platform } from 'react-native';
+import { Text, Platform, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -14,10 +15,29 @@ import QRScannerScreen from './screens/QRScannerScreen';
 import AddEquipmentScreen from './screens/AddEquipmentScreen';
 import EditEquipmentScreen from './screens/EditEquipmentScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const Stack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
+// Определяем типы для навигации
+export type RootStackParamList = {
+  Login: undefined;
+  MainApp: undefined;
+  MainTabs: undefined;
+  EditEquipment: { equipmentId?: string; equipment?: any; scanData?: string };
+  AddEquipment: undefined;
+};
 
+export type TabParamList = {
+  Equipment: undefined;
+  Scanner: undefined;
+  Add: undefined;
+  Users: undefined;
+  Profile: undefined;
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<TabParamList>();
+
+// Компоненты иконок
 const EquipmentIcon = () => <Text style={{ fontSize: 24 }}>📋</Text>;
 const ScanIcon = () => <Text style={{ fontSize: 24 }}>📷</Text>;
 const AddIcon = () => <Text style={{ fontSize: 24 }}>➕</Text>;
@@ -26,16 +46,36 @@ const ProfileIcon = () => <Text style={{ fontSize: 24 }}>👤</Text>;
 
 function MainTabs() {
   const { user } = useAuth();
-  
+  const insets = useSafeAreaInsets(); // ✅ ДОБАВИЛИ
+
   return (
-    <Tab.Navigator>
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: '#007AFF',
+        tabBarInactiveTintColor: 'gray',
+        tabBarStyle: {
+          backgroundColor: '#ffffff',
+          borderTopWidth: 1,
+          borderTopColor: '#e0e0e0',
+
+          // ❗ ВОТ ЭТО ГЛАВНЫЙ ФИКС
+          height: Platform.OS === 'ios' ? 85 : 60 + insets.bottom,
+          paddingBottom: Platform.OS === 'ios' ? 25 : insets.bottom || 12,
+          paddingTop: Platform.OS === 'ios' ? 5 : 0,
+        },
+      }}
+    >
       <Tab.Screen
         name="Equipment"
         component={EquipmentListScreen}
         options={{
-          headerShown: false,
           tabBarLabel: ({ focused }) => (
-            <Text style={{ fontSize: 10, color: focused ? '#007AFF' : 'gray' }}>
+            <Text style={{ 
+              fontSize: 10, 
+              color: focused ? '#007AFF' : 'gray',
+              fontWeight: focused ? '600' : '400',
+            }}>
               Оборудо{'\n'}вание
             </Text>
           ),
@@ -48,9 +88,12 @@ function MainTabs() {
           name="Scanner"
           component={QRScannerScreen}
           options={{
-            headerShown: false,
             tabBarLabel: ({ focused }) => (
-              <Text style={{ fontSize: 10, color: focused ? '#007AFF' : 'gray' }}>
+              <Text style={{ 
+                fontSize: 10, 
+                color: focused ? '#007AFF' : 'gray',
+                fontWeight: focused ? '600' : '400',
+              }}>
                 Сканиро{'\n'}вание
               </Text>
             ),
@@ -64,9 +107,12 @@ function MainTabs() {
           name="Add"
           component={AddEquipmentScreen}
           options={{
-            headerShown: false,
             tabBarLabel: ({ focused }) => (
-              <Text style={{ fontSize: 10, color: focused ? '#007AFF' : 'gray' }}>
+              <Text style={{ 
+                fontSize: 10, 
+                color: focused ? '#007AFF' : 'gray',
+                fontWeight: focused ? '600' : '400',
+              }}>
                 Добавить
               </Text>
             ),
@@ -80,9 +126,12 @@ function MainTabs() {
           name="Users"
           component={UsersScreen}
           options={{
-            headerShown: false,
             tabBarLabel: ({ focused }) => (
-              <Text style={{ fontSize: 10, color: focused ? '#007AFF' : 'gray' }}>
+              <Text style={{ 
+                fontSize: 10, 
+                color: focused ? '#007AFF' : 'gray',
+                fontWeight: focused ? '600' : '400',
+              }}>
                 Пользова{'\n'}тели
               </Text>
             ),
@@ -95,9 +144,12 @@ function MainTabs() {
         name="Profile"
         component={ProfileScreen}
         options={{
-          headerShown: false,
           tabBarLabel: ({ focused }) => (
-            <Text style={{ fontSize: 10, color: focused ? '#007AFF' : 'gray' }}>
+            <Text style={{ 
+              fontSize: 10, 
+              color: focused ? '#007AFF' : 'gray',
+              fontWeight: focused ? '600' : '400',
+            }}>
               Профиль
             </Text>
           ),
@@ -110,59 +162,80 @@ function MainTabs() {
 
 function MainAppContent() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        contentStyle: { backgroundColor: '#f5f5f5' },
+      }}
+    >
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen 
         name="EditEquipment" 
         component={EditEquipmentScreen}
-        options={{ headerShown: true, title: 'Редактировать' }}
+        options={{ 
+          headerShown: true, 
+          title: 'Редактировать оборудование',
+          headerStyle: {
+            backgroundColor: '#ffffff',
+          },
+          headerTitleStyle: {
+            fontWeight: '600',
+            fontSize: 18,
+          },
+          headerBackTitle: 'Назад',
+        }}
       />
       <Stack.Screen 
         name="AddEquipment" 
         component={AddEquipmentScreen}
-        options={{ headerShown: true, title: 'Добавить оборудование' }}
-      />
-    </Stack.Navigator>
-  );
-}
-
-
-function AppNavigator() {
-  const { user } = useAuth();
-
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (
-        <Stack.Screen name="MainApp" component={MainAppContent} />
-      ) : (
-        <Stack.Screen name="Login" component={LoginScreen} />
-      )}
-
-      <Stack.Screen
-        name="EditEquipment"
-        component={EditEquipmentScreen}
-        options={{
-          headerShown: true,
-          title: 'Редактирование',
+        options={{ 
+          headerShown: true, 
+          title: 'Добавить оборудование',
           headerStyle: {
-            backgroundColor: '#f8f9fa',
-            height: Platform.OS === 'ios' ? 100 : 70,
+            backgroundColor: '#ffffff',
           },
-          headerTitleStyle: { fontWeight: 'bold', fontSize: 18 },
+          headerTitleStyle: {
+            fontWeight: '600',
+            fontSize: 18,
+          },
+          headerBackTitle: 'Назад',
         }}
       />
     </Stack.Navigator>
   );
 }
 
+function AppNavigator() {
+  const { user } = useAuth();
+
+  return (
+    <Stack.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        contentStyle: { backgroundColor: '#f5f5f5' },
+      }}
+    >
+      {user ? (
+        <Stack.Screen name="MainApp" component={MainAppContent} />
+      ) : (
+        <Stack.Screen name="Login" component={LoginScreen} />
+      )}
+    </Stack.Navigator>
+  );
+}
+
 export default function App() {
   return (
-    <AuthProvider>
-      <NavigationContainer>
-        {/* ✅ Глобально задаём “обычный” status bar */}
-        <StatusBar style="dark" translucent={false} />
-        <AppNavigator />
-      </NavigationContainer>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <NavigationContainer>
+          <StatusBar 
+            style="dark" 
+            backgroundColor="#ffffff" 
+          />
+          <AppNavigator />
+        </NavigationContainer>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
